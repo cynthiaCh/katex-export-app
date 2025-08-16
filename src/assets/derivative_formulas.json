@@ -1,0 +1,20 @@
+[
+  {
+    "title": "自然对数",
+    "latex": "\\frac{d}{dx} \\ln x = \\frac{1}{x},\\; x>0",
+    "note": "ln(x) 的导数是 1/x。曲线越往右，切线越平，斜率越小。",
+    "plot": { "type": "ln", "xMin": 0.1, "xMax": 6, "tangentAt": [1, 3] }
+  },
+  {
+    "title": "正弦函数",
+    "latex": "\\frac{d}{dx} \\sin x = \\cos x",
+    "note": "sin(x) 的导数是 cos(x)",
+    "plot": { "type": "sin", "xMin": -6.283, "xMax": 6.283 }
+  },
+  {
+    "title": "余弦函数",
+    "latex": "\\frac{d}{dx} \\cos x = -\\sin x",
+    "note": "cos(x) 的导数是 -sin(x)",
+    "plot": { "type": "cos", "xMin": -6.283, "xMax": 6.283 }
+  }
+]
