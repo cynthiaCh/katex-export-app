@@ -2,7 +2,7 @@ name: Deploy Vite site to Pages
 
 on:
   push:
-    branches: ["main"] # 你的主分支
+    branches: ["master"] # 你的主分支
 
 permissions:
   contents: read
