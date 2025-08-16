@@ -2,33 +2,37 @@ name: Deploy Vite site to Pages
 
 on:
   push:
-    branches: ["master"]   # 你现在用的 master
+    branches: [ "master" ]  # 你当前用的 master
 
 permissions:
   contents: read
   pages: write
   id-token: write
 
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 18
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build (force base)
-        run: npm run build   # 这里会用 package.json 中的 --base=/katex-export-app/
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+          cache: npm
+      - run: npm ci
+      - run: npm run build   # vite.config.ts 里 base = '/katex-export-app/'
+      - run: cp dist/index.html dist/404.html  # 可选：SPA 刷新不 404
+      - uses: actions/configure-pages@v5
+      - name: Sanity check
+        run: |
+          echo "---- dist tree ----"
+          ls -la dist
+          echo "---- assets ----"
+          ls -la dist/assets | head -n 20
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
@@ -39,6 +43,5 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
+      - id: deployment
         uses: actions/deploy-pages@v4
