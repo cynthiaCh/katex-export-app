@@ -5,6 +5,31 @@
     <!-- 公式 -->
     <div class="formula" :id="'formula-' + index"></div>
 
+    <!-- 参数滑块：仅 sin/cos 显示 -->
+    <div
+      v-if="item.plot && (item.plot.type==='sin' || item.plot.type==='cos')"
+      class="param-panel"
+    >
+      <div class="param-row">
+        <label>A (Amplitude)</label>
+        <input type="range" min="0" max="5" step="0.01" v-model.number="params[index].A" @input="onParamChange(index)" />
+        <input type="number" step="0.01" v-model.number="params[index].A" @change="onParamChange(index)" />
+      </div>
+      <div class="param-row">
+        <label>ω (Frequency)</label>
+        <input type="range" min="0" max="5" step="0.01" v-model.number="params[index].w" @input="onParamChange(index)" />
+        <input type="number" step="0.01" v-model.number="params[index].w" @change="onParamChange(index)" />
+      </div>
+      <div class="param-row">
+        <label>φ (Phase)</label>
+        <input type="range" :min="-Math.PI" :max="Math.PI" step="0.01" v-model.number="params[index].phi" @input="onParamChange(index)" />
+        <input type="number" :min="-Math.PI" :max="Math.PI" step="0.01" v-model.number="params[index].phi" @change="onParamChange(index)" />
+      </div>
+      <div class="param-actions">
+        <button @click="resetParams(index)">Reset</button>
+      </div>
+    </div>
+
     <!-- 固定尺寸图表 -->
     <div v-if="item.plot" class="plot-wrap">
       <canvas
@@ -16,24 +41,24 @@
       <div class="plot-caption">
         <span>Function & Derivative</span>
         <span v-if="item.plot.type==='ln'"> (y = ln x, y' = 1/x)</span>
-        <span v-else-if="item.plot.type==='sin'"> (y = sin x, y' = cos x)</span>
-        <span v-else-if="item.plot.type==='cos'"> (y = cos x, y' = -sin x)</span>
-        <button class="btn-link" @click="resetView(index)" title="恢复到全局范围">查看全局</button>
+        <span v-else-if="item.plot.type==='sin'"> (y = A*sin(ωx+φ), y' = Aω*cos(ωx+φ))</span>
+        <span v-else-if="item.plot.type==='cos'"> (y = A*cos(ωx+φ), y' = -Aω*sin(ωx+φ))</span>
+        <button class="btn-link" @click="resetView(index)" title="Restore full view">View Full</button>
       </div>
     </div>
 
     <!-- 计算函数值 -->
     <div class="calc">
       <div class="calc-row">
-        <label>输入 x₀：</label>
+        <label>Input x₀:</label>
         <input
           type="number"
           v-model.number="probeInputs[index]"
           :step="item.plot?.type==='ln' ? '0.01' : '0.1'"
           :min="item.plot?.type==='ln' ? '0.0001' : undefined"
-          placeholder="例如 1 / 10 / 999"
+          placeholder="e.g., 1 / 10 / 999"
         />
-        <button @click="doCompute(index)">计算</button>
+        <button @click="doCompute(index)">Compute</button>
       </div>
       <div class="calc-result" v-if="results[index]">
         <div>f(x₀) = {{ results[index].fx }}</div>
@@ -45,9 +70,9 @@
     <p class="note">{{ item.note }}</p>
 
     <div class="btns">
-      <button @click="exportFormula(index)">导出公式 PNG</button>
-      <button v-if="item.plot" @click="exportPlot(index)">导出图像 PNG</button>
-      <button v-if="item.plot" @click="exportCard(index)">导出整卡 PNG</button>
+      <button @click="exportFormula(index)">Export Formula PNG</button>
+      <button v-if="item.plot" @click="exportPlot(index)">Export Plot PNG</button>
+      <button v-if="item.plot" @click="exportCard(index)">Export Card PNG</button>
     </div>
   </div>
 </template>
@@ -80,6 +105,14 @@ const COLOR_GUIDE= '#999999'   // 辅助线：灰
 const charts = new Map()
 const fullRanges = new Map() // index -> {xMin, xMax}
 
+// 参数（仅 sin/cos 用）
+const params = ref(
+  formulas.map(item => (item.plot && (item.plot.type==='sin' || item.plot.type==='cos'))
+    ? { A: 1, w: 1, phi: 0 }
+    : null
+  )
+)
+
 // 计算输入与结果
 const probeInputs = ref(formulas.map(() => null))
 const results = ref(formulas.map(() => null))
@@ -111,8 +144,9 @@ onBeforeUnmount(() => {
   fullRanges.clear()
 })
 
-/** 返回函数与导数 */
-function getFuncs(type) {
+/** 函数与导数（考虑 A,w,phi） */
+function getFuncs(type, p = {A:1,w:1,phi:0}) {
+  const { A=1, w=1, phi=0 } = p || {}
   switch (type) {
     case 'ln':
       return {
@@ -122,15 +156,15 @@ function getFuncs(type) {
       }
     case 'sin':
       return {
-        f: x => Math.sin(x),
-        d: x => Math.cos(x),
-        names: { f: 'sin x', d: 'cos x' }
+        f: x => A * Math.sin(w * x + phi),
+        d: x => A * w * Math.cos(w * x + phi),
+        names: { f: 'A*sin(ωx+φ)', d: 'Aω*cos(ωx+φ)' }
       }
     case 'cos':
       return {
-        f: x => Math.cos(x),
-        d: x => -Math.sin(x),
-        names: { f: 'cos x', d: '-sin x' }
+        f: x => A * Math.cos(w * x + phi),
+        d: x => -A * w * Math.sin(w * x + phi),
+        names: { f: 'A*cos(ωx+φ)', d: '-Aω*sin(ωx+φ)' }
       }
     default:
       return {
@@ -141,9 +175,9 @@ function getFuncs(type) {
   }
 }
 
-/** 采样数据（给定范围） */
-function buildData(type, xMin, xMax, N = 500) {
-  const { f, d } = getFuncs(type)
+/** 采样数据（给定范围，考虑参数） */
+function buildData(type, xMin, xMax, p, N = 600) {
+  const { f, d } = getFuncs(type, p)
   const xs = Array.from({ length: N }, (_, i) => xMin + (xMax - xMin) * (i / (N - 1)))
   const dataF = []
   const dataD = []
@@ -174,10 +208,10 @@ function makePlot(item, index, xMin, xMax) {
     charts.delete(index)
   }
 
-  // 采样
+  const p = params.value[index]
   const type = item.plot?.type
-  const { xs, dataF, dataD } = buildData(type, xMin, xMax)
-  const { names } = getFuncs(type)
+  const { xs, dataF, dataD } = buildData(type, xMin, xMax, p)
+  const { names } = getFuncs(type, p)
 
   // 切线（仅 ln）
   const tangentDatasets = []
@@ -251,6 +285,54 @@ function makePlot(item, index, xMin, xMax) {
   chart.update()
 }
 
+/** 重建当前曲线数据（响应滑块），保持现有视图与 fullRange */
+function rebuildDatasets(index) {
+  const chart = charts.get(index)
+  const item = formulas[index]
+  if (!chart || !item?.plot) return
+
+  const type = item.plot.type
+  const p = params.value[index]
+
+  // 用当前 fullRange 重采样
+  const full = fullRanges.get(index)
+  const { dataF, dataD } = buildData(type, full.xMin, full.xMax, p)
+
+  // 第一、二个 dataset 为 f 与 f'
+  chart.data.datasets[0].data = dataF
+  chart.data.datasets[1].data = dataD
+
+  // 更新图例文字
+  const { names } = getFuncs(type, p)
+  chart.data.datasets[0].label = names.f
+  chart.data.datasets[1].label = names.d
+
+  // 维持当前可见 X 范围
+  const xMin = chart.options.scales.x.min ?? full.xMin
+  const xMax = chart.options.scales.x.max ?? full.xMax
+
+  // 重算可见区 Y 范围
+  const [yMin, yMax] = getVisibleYRange(chart, xMin, xMax)
+  setYRange(chart, yMin, yMax)
+
+  chart.update()
+}
+
+/** 参数变化（滑块/输入框） */
+function onParamChange(index) {
+  const p = params.value[index]
+  // 基本校验：频率不能为负
+  if (p && p.w < 0) p.w = 0
+  rebuildDatasets(index)
+}
+
+/** 重置参数 */
+function resetParams(index) {
+  if (!params.value[index]) return
+  params.value[index] = { A: 1, w: 1, phi: 0 }
+  rebuildDatasets(index)
+}
+
 /** 根据窗口内可见数据获取 y 范围 */
 function getVisibleYRange(chart, xMin, xMax) {
   const ys = []
@@ -284,12 +366,11 @@ function ensureCoverage(index, item, wantMin, wantMax) {
   if (wantMin < xMin) { xMin = wantMin; needExpand = true }
   if (wantMax > xMax) { xMax = wantMax; needExpand = true }
   if (needExpand) {
-    // 重新构建整张图的数据（不会影响尺寸/导出）
-    makePlot(item, index, xMin, xMax)
+    makePlot(item, index, xMin, xMax) // 重建整图
   }
 }
 
-/** 计算 & 局部放大 */
+/** 计算 & 局部放大（考虑参数） */
 function doCompute(index) {
   const item = formulas[index]
   const x0 = Number(probeInputs.value[index])
@@ -300,7 +381,8 @@ function doCompute(index) {
   }
 
   const type = item.plot?.type
-  const { f, d } = getFuncs(type)
+  const p = params.value[index]
+  const { f, d } = getFuncs(type, p)
   let fx, dx, warn = ''
 
   if (type === 'ln') {
@@ -315,24 +397,26 @@ function doCompute(index) {
   dx = d(x0)
   results.value[index] = { fx: formatNum(fx), dx: formatNum(dx), warn }
 
-  // —— 目标局部窗口（先计算想要的） —— //
+  // 目标局部窗口（先算想要的）
   const full = fullRanges.get(index)
   if (!full) return
   let wantMin, wantMax
+
   if (type === 'ln') {
     const eps = 1e-6
     wantMin = Math.max(x0 / 2, eps)
     wantMax = Math.max(2 * x0, wantMin + eps)
   } else {
-    const W = Math.PI
+    const w = Math.max(p?.w ?? 1, 0.01) // 频率下限，避免窗口无穷大
+    const W = Math.PI / w
     wantMin = x0 - W
     wantMax = x0 + W
   }
 
-  // —— 确保有数据覆盖该窗口：如需则动态扩展并重采样 —— //
+  // 确保覆盖数据
   ensureCoverage(index, item, wantMin, wantMax)
 
-  // 现在开展缩放 & 探针绘制
+  // 缩放到局部，并让 y 轴围绕可见数据+探针值联动
   zoomToNeighborhood(index, item, x0, fx, dx, wantMin, wantMax)
 }
 
@@ -342,13 +426,9 @@ function zoomToNeighborhood(index, item, x0, fx, dx, wantMin, wantMax) {
   const full = fullRanges.get(index)
   if (!chart || !full) return
 
-  // 实际应用的窗口：夹到最新全局
   let xMin = Math.max(wantMin, full.xMin)
   let xMax = Math.min(wantMax, full.xMax)
-
-  // 兜底：防止 xMin >= xMax
   if (!(xMax > xMin)) {
-    // 使用全局最后 10% 作为窗口
     const span = full.xMax - full.xMin
     xMin = full.xMax - Math.max(0.1 * span, 1e-3)
     xMax = full.xMax
@@ -357,7 +437,6 @@ function zoomToNeighborhood(index, item, x0, fx, dx, wantMin, wantMax) {
   chart.options.scales.x.min = xMin
   chart.options.scales.x.max = xMax
 
-  // y 范围：可见数据 + {fx,dx} 兜底
   let [yMin, yMax] = getVisibleYRange(chart, xMin, xMax)
   const extra = [fx, dx].filter(Number.isFinite)
   if (extra.length) {
@@ -367,7 +446,6 @@ function zoomToNeighborhood(index, item, x0, fx, dx, wantMin, wantMax) {
   if (!(yMax > yMin)) { yMin -= 1; yMax += 1 }
   setYRange(chart, yMin, yMax)
 
-  // 探针：垂直线 + 两点
   addOrUpdateProbe(index, x0, fx, dx)
   chart.update()
 }
@@ -387,7 +465,6 @@ function addOrUpdateProbe(index, x0, fx, dx) {
     return ds
   }
 
-  // 用当前 y 轴范围绘制垂直线高度
   const sy = chart.options.scales.y || {}
   let yMin = Number.isFinite(sy.min) ? sy.min : -3
   let yMax = Number.isFinite(sy.max) ? sy.max : 3
@@ -487,7 +564,36 @@ function downloadCanvas(canvas, filename) {
   border: 1px solid #ccc;
   border-radius: 10px;
 }
+
 .formula { font-size: 28px; margin: 8px 0 6px 0; }
+
+.param-panel {
+  margin: 8px 0 6px 0;
+  background: #fbfcfe;
+  border: 1px solid #e6eef6;
+  border-radius: 8px;
+  padding: 10px;
+}
+.param-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 100px;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.param-row label { color: #334155; font-size: 13px; }
+.param-row input[type="number"] {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #c9d6e2; border-radius: 6px;
+}
+.param-actions { display: flex; justify-content: flex-end; }
+.param-actions button {
+  padding: 6px 10px; border-radius: 6px;
+  border: 1px solid #bbb; background: #fff; cursor: pointer;
+}
+.param-actions button:hover { background: #f2f2f2; }
+
 .plot-wrap {
   margin-top: 8px;
   border: 1px dashed #ddd;
@@ -528,7 +634,9 @@ function downloadCanvas(canvas, filename) {
   display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px;
 }
 .calc-result .warn { grid-column: 1 / -1; color: #c0392b; font-size: 12px; }
+
 .note { color: #666; font-size: 0.9em; margin-top: 8px; }
+
 .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 button {
   padding: 6px 10px; border-radius: 6px;
